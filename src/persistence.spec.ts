@@ -5,6 +5,7 @@ import {
   desktopPluginDescriptorSchema,
   validatePluginConnectionConfig,
   validatePluginResourceState,
+  upgradePluginConnectionConfig,
 } from "./index";
 
 function example() {
@@ -134,5 +135,62 @@ describe("plugin-owned persistence contract", () => {
     expect(() => {
       assertPluginPersistenceContract(plugin);
     }).not.toThrow();
+  });
+});
+
+describe("persistence boundary snapshots and explicit upgrades", () => {
+  it("sanitizes throwing input traps and snapshots handler getters", () => {
+    const plugin = example();
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("secret");
+        },
+      },
+    );
+    expect(() => validatePluginConnectionConfig(plugin, 1, hostile)).toThrow(
+      "invalid_configuration",
+    );
+    if (plugin.persistence === undefined)
+      throw new Error("Missing fixture handlers");
+    let reads = 0;
+    plugin.persistence.validateConfig = () => ({
+      baseUrl: "https://example.test",
+      get mapping() {
+        reads += 1;
+        return reads === 1 ? {} : { apiKey: "secret" };
+      },
+    });
+    const config = validatePluginConnectionConfig(plugin, 1, {
+      baseUrl: "https://example.test",
+    });
+    expect(config.mapping).toEqual({});
+    expect(config.mapping).toEqual({});
+    expect(reads).toBe(1);
+  });
+
+  it("upgrades only explicitly and prevents changing a connection target", () => {
+    const plugin = example();
+    const contract = plugin.metadata?.persistence;
+    if (contract === undefined || plugin.persistence === undefined)
+      throw new Error("Missing fixture contract");
+    contract.configVersion = 2;
+    plugin.persistence.upgradeConfig = ({ config }) => ({ version: 2, config });
+    const config = { baseUrl: "https://example.test" };
+    expect(() => validatePluginConnectionConfig(plugin, 1, config)).toThrow(
+      "upgrade_required",
+    );
+    expect(
+      upgradePluginConnectionConfig(plugin, 1, config, config.baseUrl),
+    ).toEqual({ version: 2, config });
+    expect(() =>
+      upgradePluginConnectionConfig(
+        plugin,
+        1,
+        config,
+        "https://different.test",
+      ),
+    ).toThrow("invalid_configuration");
   });
 });

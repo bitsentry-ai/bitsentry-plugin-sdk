@@ -132,10 +132,10 @@ export function validatePluginConnectionConfig(
     if (typeof destination !== "string" || !destination.trim()) invalid();
     return record;
   };
-  const config = validateShape(input);
   try {
+    const config = validateShape(structuredClone(input));
     return validateShape(
-      plugin.persistence.validateConfig(structuredClone(config)),
+      structuredClone(plugin.persistence.validateConfig(config)),
     );
   } catch {
     return invalid();
@@ -161,14 +161,65 @@ export function validatePluginResourceState(
     const credentialKeys = new Set(
       plugin.auth.fields.map((field) => field.key),
     );
-    validateJson(state, credentialKeys);
-    const result = plugin.persistence.validateResourceState({
-      resourceType,
-      version,
-      state: structuredClone(state),
-    });
+    const snapshot: unknown = structuredClone(state);
+    validateJson(snapshot, credentialKeys);
+    const result: unknown = structuredClone(
+      plugin.persistence.validateResourceState({
+        resourceType,
+        version,
+        state: snapshot,
+      }),
+    );
     validateJson(result, credentialKeys);
     return result;
+  } catch {
+    return invalid();
+  }
+}
+
+/** Explicit upgrade proposal. Ordinary reads/validation never migrate storage. */
+export function upgradePluginConnectionConfig(
+  plugin: DesktopCodePlugin | undefined,
+  version: number,
+  input: unknown,
+  expectedTarget: string,
+): { version: number; config: Record<string, unknown> } {
+  if (plugin === undefined) throw new PluginPersistenceError("plugin_missing");
+  const contract = requirePluginPersistence(plugin);
+  if (
+    !Number.isInteger(version) ||
+    version < 1 ||
+    version >= contract.configVersion ||
+    plugin.persistence?.upgradeConfig === undefined
+  ) {
+    throw new PluginPersistenceError("upgrade_required");
+  }
+  try {
+    const snapshot: unknown = structuredClone(input);
+    validateJson(
+      snapshot,
+      new Set(plugin.auth.fields.map((field) => field.key)),
+    );
+    if (
+      typeof snapshot !== "object" ||
+      snapshot === null ||
+      Array.isArray(snapshot)
+    )
+      invalid();
+    const upgraded = structuredClone(
+      plugin.persistence.upgradeConfig({
+        version,
+        config: snapshot as Record<string, unknown>,
+      }),
+    );
+    if (upgraded.version !== contract.configVersion) invalid();
+    const config = validatePluginConnectionConfig(
+      plugin,
+      upgraded.version,
+      upgraded.config,
+    );
+    if (config[contract.destinationField] !== expectedTarget) invalid();
+    return { version: contract.configVersion, config };
   } catch {
     return invalid();
   }

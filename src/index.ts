@@ -214,6 +214,16 @@ export const desktopPluginPersistenceSchema = z
   })
   .superRefine((contract, context) => {
     const keys = contract.configFields.map((field) => field.key);
+    if (
+      keys.some((key) =>
+        ["constructor", "prototype", "__proto__"].includes(key),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Configuration field keys cannot be reserved object keys.",
+      });
+    }
     if (new Set(keys).size !== keys.length) {
       context.addIssue({
         code: "custom",
