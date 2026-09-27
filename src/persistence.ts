@@ -102,20 +102,21 @@ function validateJson(
   }
 }
 
-/** Use on persistence writes and again before connection execution. */
-export function validatePluginConnectionConfig(
-  plugin: DesktopCodePlugin | undefined,
+/** Descriptor-only validation for API/UI admission; execution also runs the plugin validator. */
+export function validatePluginConnectionShape(
+  descriptor: DesktopPluginDescriptor,
   version: number,
   input: unknown,
 ): Record<string, unknown> {
-  if (plugin === undefined) throw new PluginPersistenceError("plugin_missing");
-  const contract = requirePluginPersistence(plugin);
+  const contract = requirePluginPersistence(descriptor);
   if (version !== contract.configVersion)
     throw new PluginPersistenceError("upgrade_required");
-  if (plugin.persistence === undefined) invalid();
-  const credentialKeys = new Set(plugin.auth.fields.map((field) => field.key));
-  const validateShape = (value: unknown): Record<string, unknown> => {
-    validateJson(value, credentialKeys);
+  try {
+    const value: unknown = structuredClone(input);
+    validateJson(
+      value,
+      new Set(descriptor.auth.fields.map((field) => field.key)),
+    );
     if (value === null || typeof value !== "object" || Array.isArray(value))
       invalid();
     const record = value as Record<string, unknown>;
@@ -131,11 +132,25 @@ export function validatePluginConnectionConfig(
     const destination = record[contract.destinationField];
     if (typeof destination !== "string" || !destination.trim()) invalid();
     return record;
-  };
+  } catch {
+    return invalid();
+  }
+}
+
+/** Use on persistence writes and again before connection execution. */
+export function validatePluginConnectionConfig(
+  plugin: DesktopCodePlugin | undefined,
+  version: number,
+  input: unknown,
+): Record<string, unknown> {
+  if (plugin === undefined) throw new PluginPersistenceError("plugin_missing");
+  const config = validatePluginConnectionShape(plugin, version, input);
+  if (plugin.persistence === undefined) invalid();
   try {
-    const config = validateShape(structuredClone(input));
-    return validateShape(
-      structuredClone(plugin.persistence.validateConfig(config)),
+    return validatePluginConnectionShape(
+      plugin,
+      version,
+      plugin.persistence.validateConfig(config),
     );
   } catch {
     return invalid();

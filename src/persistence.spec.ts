@@ -4,6 +4,8 @@ import {
   desktopCodePluginSchema,
   desktopPluginDescriptorSchema,
   validatePluginConnectionConfig,
+  validatePluginConnectionShape,
+  desktopPluginExecutionRequestSchema,
   validatePluginResourceState,
   upgradePluginConnectionConfig,
 } from "./index";
@@ -49,6 +51,32 @@ function example() {
 }
 
 describe("plugin-owned persistence contract", () => {
+  it("keeps configuration separate from credentials across the execution transport", () => {
+    const plugin = example();
+    const descriptor = desktopPluginDescriptorSchema.parse(plugin);
+    const config = validatePluginConnectionShape(descriptor, 1, {
+      baseUrl: "https://example.test",
+    });
+    const request = desktopPluginExecutionRequestSchema.parse({
+      pluginId: plugin.id,
+      actionId: "read",
+      auth: { apiKey: "secret-value" },
+      connectionConfig: { version: 1, value: config },
+    });
+    expect(request.connectionConfig?.value).toEqual({
+      baseUrl: "https://example.test",
+    });
+    expect(JSON.stringify(request.connectionConfig)).not.toContain(
+      "secret-value",
+    );
+    expect(() =>
+      validatePluginConnectionShape(descriptor, 1, {
+        baseUrl: "https://example.test",
+        apiKey: "secret-value",
+      }),
+    ).toThrow("invalid_configuration");
+  });
+
   it("round-trips metadata without serializing handlers or adding a provider enum", () => {
     const plugin = example();
     expect(() => {
