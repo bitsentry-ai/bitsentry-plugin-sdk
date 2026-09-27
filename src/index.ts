@@ -130,9 +130,22 @@ export type DesktopPluginActionDefinition = z.infer<
   typeof desktopPluginActionDefinitionSchema
 >;
 
-export const desktopPluginAuthSchema = z.object({
-  fields: z.array(desktopPluginFieldDefinitionSchema),
-});
+export const desktopPluginAuthSchema = z
+  .object({
+    fields: z.array(desktopPluginFieldDefinitionSchema),
+    requiredSets: z
+      .array(z.array(z.string().min(1)).min(1))
+      .min(1)
+      .optional(),
+  })
+  .superRefine((auth, context) => {
+    const keys = new Set(auth.fields.map((field) => field.key));
+    if (auth.requiredSets?.some((set) => set.some((key) => !keys.has(key))))
+      context.addIssue({
+        code: "custom",
+        message: "Credential requirements must name declared auth fields",
+      });
+  });
 
 export type DesktopPluginAuth = z.infer<typeof desktopPluginAuthSchema>;
 
