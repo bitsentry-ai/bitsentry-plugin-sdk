@@ -314,6 +314,13 @@ export type DesktopPluginInstallFromArtifactResult = z.infer<
 >;
 
 export const desktopPluginExecutionRequestSchema = z.object({
+  connectionConfig: z
+    .object({
+      version: z.number().int().positive(),
+      value: z.record(z.string(), z.unknown()),
+    })
+    .strict()
+    .optional(),
   pluginId: z.string().min(1),
   actionId: z.string().min(1),
   auth: z.record(z.string(), z.unknown()).optional().default({}),
@@ -366,6 +373,8 @@ export type DesktopPluginOperationContext = {
 };
 
 export type DesktopPluginCodeActionContext = {
+  /** Host-validated non-secret configuration of the selected connection. */
+  config?: Record<string, unknown>;
   pluginId: string;
   actionId: string;
   auth: Record<string, unknown>;
