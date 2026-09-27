@@ -497,9 +497,10 @@ export const desktopCodePluginPersistenceSchema = z.object({
     "validateConfig must be a function.",
   ),
   upgradeConfig: z
-    .custom<
-      NonNullable<DesktopPluginPersistenceHandlers["upgradeConfig"]>
-    >((value) => typeof value === "function", "upgradeConfig must be a function.")
+    .custom<NonNullable<DesktopPluginPersistenceHandlers["upgradeConfig"]>>(
+      (value) => typeof value === "function",
+      "upgradeConfig must be a function.",
+    )
     .optional(),
   validateResourceState: z.custom<
     DesktopPluginPersistenceHandlers["validateResourceState"]

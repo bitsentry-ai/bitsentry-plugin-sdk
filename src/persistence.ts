@@ -6,10 +6,7 @@ import type {
 } from "./index";
 
 export type ConnectionAvailability =
-  | "available"
-  | "plugin_missing"
-  | "upgrade_required"
-  | "invalid_configuration";
+  "available" | "plugin_missing" | "upgrade_required" | "invalid_configuration";
 
 /** Stable errors never contain plugin exceptions or configuration values. */
 export class PluginPersistenceError extends Error {
