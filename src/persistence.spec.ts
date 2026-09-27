@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPluginPersistenceContract,
+  hasPluginCredentials,
   desktopCodePluginSchema,
   desktopPluginDescriptorSchema,
   validatePluginConnectionConfig,
@@ -221,4 +222,24 @@ describe("persistence boundary snapshots and explicit upgrades", () => {
       ),
     ).toThrow("invalid_configuration");
   });
+});
+
+it("requires one complete plugin-declared credential set", () => {
+  const plugin = desktopPluginDescriptorSchema.parse({
+    ...example(),
+    auth: {
+      fields: [
+        { key: "token", label: "Token", type: "string" },
+        { key: "user", label: "User", type: "string" },
+        { key: "password", label: "Password", type: "string" },
+      ],
+      requiredSets: [["token"], ["user", "password"]],
+    },
+  });
+  expect(hasPluginCredentials(plugin, {})).toBe(false);
+  expect(hasPluginCredentials(plugin, { user: "engineer" })).toBe(false);
+  expect(hasPluginCredentials(plugin, { token: "private" })).toBe(true);
+  expect(
+    hasPluginCredentials(plugin, { user: "engineer", password: "private" }),
+  ).toBe(true);
 });

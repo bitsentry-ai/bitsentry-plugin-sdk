@@ -239,3 +239,21 @@ export function upgradePluginConnectionConfig(
     return invalid();
   }
 }
+
+/** Alternative credential sets are plugin vocabulary, never provider switches. */
+export function hasPluginCredentials(
+  descriptor: DesktopPluginDescriptor,
+  values: Record<string, unknown>,
+): boolean {
+  const present = (key: string) =>
+    typeof values[key] === "string"
+      ? values[key].trim().length > 0
+      : values[key] !== undefined && values[key] !== null;
+  return (
+    descriptor.auth.fields.every(
+      (field) => !field.required || present(field.key),
+    ) &&
+    (descriptor.auth.requiredSets === undefined ||
+      descriptor.auth.requiredSets.some((set) => set.every(present)))
+  );
+}
