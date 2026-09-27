@@ -197,7 +197,63 @@ export type DesktopPluginType = z.infer<typeof desktopPluginTypeSchema>;
 
 export const DEFAULT_DESKTOP_PLUGIN_TYPE: DesktopPluginType = "data_source";
 
+/** Serializable plugin-owned persistence vocabulary. No provider IDs live here. */
+export const desktopPluginPersistenceSchema = z
+  .object({
+    configVersion: z.number().int().positive(),
+    configFields: z.array(desktopPluginFieldDefinitionSchema),
+    destinationField: z.string().min(1),
+    resources: z.array(
+      z.object({
+        type: z.string().min(1),
+        stateVersion: z.number().int().positive(),
+        readActionId: z.string().min(1),
+      }),
+    ),
+    eventChannels: z.array(z.string().min(1)),
+  })
+  .superRefine((contract, context) => {
+    const keys = contract.configFields.map((field) => field.key);
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Configuration field keys must be unique.",
+      });
+    }
+    const destination = contract.configFields.find(
+      (field) => field.key === contract.destinationField,
+    );
+    if (destination?.type !== "string" || !destination.required) {
+      context.addIssue({
+        code: "custom",
+        message: "Destination must be a required string configuration field.",
+      });
+    }
+    if (contract.configFields.some((field) => field.secret === true)) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Secrets belong in auth fields, never persisted configuration.",
+      });
+    }
+    if (
+      new Set(contract.resources.map((resource) => resource.type)).size !==
+        contract.resources.length ||
+      new Set(contract.eventChannels).size !== contract.eventChannels.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Resource types and event channels must be unique.",
+      });
+    }
+  });
+
+export type DesktopPluginPersistence = z.infer<
+  typeof desktopPluginPersistenceSchema
+>;
+
 export const desktopPluginDescriptorMetadataSchema = z.object({
+  persistence: desktopPluginPersistenceSchema.optional(),
   dataSource: z
     .object({
       sourceType: desktopPluginDataSourceTypeSchema,
@@ -418,6 +474,41 @@ export type DesktopCodePluginAction = z.infer<
   typeof desktopCodePluginActionSchema
 >;
 
+/** Pure validation/upgrades run inside the plugin runtime, without database access. */
+export interface DesktopPluginPersistenceHandlers {
+  validateConfig: (config: Record<string, unknown>) => Record<string, unknown>;
+  upgradeConfig?: (input: {
+    version: number;
+    config: Record<string, unknown>;
+  }) => {
+    version: number;
+    config: Record<string, unknown>;
+  };
+  validateResourceState: (input: {
+    resourceType: string;
+    version: number;
+    state: unknown;
+  }) => unknown;
+}
+
+export const desktopCodePluginPersistenceSchema = z.object({
+  validateConfig: z.custom<DesktopPluginPersistenceHandlers["validateConfig"]>(
+    (value) => typeof value === "function",
+    "validateConfig must be a function.",
+  ),
+  upgradeConfig: z
+    .custom<
+      NonNullable<DesktopPluginPersistenceHandlers["upgradeConfig"]>
+    >((value) => typeof value === "function", "upgradeConfig must be a function.")
+    .optional(),
+  validateResourceState: z.custom<
+    DesktopPluginPersistenceHandlers["validateResourceState"]
+  >(
+    (value) => typeof value === "function",
+    "validateResourceState must be a function.",
+  ),
+});
+
 export const desktopCodePluginSchema = desktopPluginDescriptorSchema
   .omit({
     actions: true,
@@ -425,6 +516,9 @@ export const desktopCodePluginSchema = desktopPluginDescriptorSchema
   .extend({
     actions: z.array(desktopCodePluginActionSchema),
     dataSource: desktopCodePluginDataSourceSchema.optional(),
+    persistence: desktopCodePluginPersistenceSchema.optional(),
   });
 
 export type DesktopCodePlugin = z.infer<typeof desktopCodePluginSchema>;
+
+export * from "./persistence";
