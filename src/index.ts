@@ -522,4 +522,4 @@ export const desktopCodePluginSchema = desktopPluginDescriptorSchema
 
 export type DesktopCodePlugin = z.infer<typeof desktopCodePluginSchema>;
 
-export * from "./persistence";
+export * from "./persistence.js";
