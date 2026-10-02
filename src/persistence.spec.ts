@@ -58,7 +58,7 @@ describe("plugin-owned persistence contract", () => {
     const roundTrip = desktopPluginDescriptorSchema.parse(
       JSON.parse(JSON.stringify(descriptor)),
     );
-    expect(roundTrip.metadata?.persistence?.resources[0]?.type).toBe("case");
+    expect(roundTrip).toEqual(descriptor);
     expect(descriptor).not.toHaveProperty("persistence");
     expect(
       validatePluginConnectionConfig(plugin, 1, {
@@ -154,20 +154,21 @@ describe("persistence boundary snapshots and explicit upgrades", () => {
     );
     if (plugin.persistence === undefined)
       throw new Error("Missing fixture handlers");
-    let reads = 0;
+    let mapping: Record<string, unknown> = {};
     plugin.persistence.validateConfig = () => ({
       baseUrl: "https://example.test",
       get mapping() {
-        reads += 1;
-        return reads === 1 ? {} : { apiKey: "secret" };
+        return mapping;
       },
     });
     const config = validatePluginConnectionConfig(plugin, 1, {
       baseUrl: "https://example.test",
     });
-    expect(config.mapping).toEqual({});
-    expect(config.mapping).toEqual({});
-    expect(reads).toBe(1);
+    mapping = { apiKey: "secret" };
+    expect(JSON.parse(JSON.stringify(config))).toEqual({
+      baseUrl: "https://example.test",
+      mapping: {},
+    });
   });
 
   it("upgrades only explicitly and prevents changing a connection target", () => {
