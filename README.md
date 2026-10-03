@@ -8,6 +8,8 @@ plugin discovery, installation, credential storage, execution, and UI.
 
 ## Installation
 
+Requires Node.js 18 or newer.
+
 ```sh
 npm install @bitsentry/plugin-sdk
 ```

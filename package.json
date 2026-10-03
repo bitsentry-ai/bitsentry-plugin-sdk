@@ -4,6 +4,9 @@
   "description": "SDK contracts and validation schemas for BitSentry desktop plugins.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/index.d.ts",
