@@ -245,10 +245,13 @@ export function hasPluginCredentials(
   descriptor: DesktopPluginDescriptor,
   values: Record<string, unknown>,
 ): boolean {
-  const present = (key: string) =>
-    typeof values[key] === "string"
-      ? values[key].trim().length > 0
-      : values[key] !== undefined && values[key] !== null;
+  const present = (key: string) => {
+    if (!Object.prototype.hasOwnProperty.call(values, key)) return false;
+    const value = values[key];
+    return typeof value === "string"
+      ? value.trim().length > 0
+      : value !== undefined && value !== null;
+  };
   return (
     descriptor.auth.fields.every(
       (field) => !field.required || present(field.key),

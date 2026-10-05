@@ -244,3 +244,18 @@ it("requires one complete plugin-declared credential set", () => {
     hasPluginCredentials(plugin, { user: "engineer", password: "private" }),
   ).toBe(true);
 });
+
+it("does not count inherited object properties as saved credentials", () => {
+  const plugin = desktopPluginDescriptorSchema.parse({
+    ...example(),
+    auth: {
+      fields: [
+        { key: "constructor", label: "Constructor", type: "string" },
+        { key: "toString", label: "To string", type: "string" },
+      ],
+      requiredSets: [["constructor"], ["toString"]],
+    },
+  });
+  expect(hasPluginCredentials(plugin, {})).toBe(false);
+  expect(hasPluginCredentials(plugin, { constructor: "private" })).toBe(true);
+});
