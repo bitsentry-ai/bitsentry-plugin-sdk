@@ -75,6 +75,19 @@ function matchesField(
   }
 }
 
+/**
+ * A plain object has no prototype or the root prototype of its realm. Comparing with this module's own
+ * `Object.prototype` would refuse a plain object that was created or cloned in another realm (a worker context, a
+ * test sandbox), while a class instance still has a prototype that itself has a prototype.
+ */
+function isPlainObject(value: object): boolean {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return (
+    prototype === null ||
+    (typeof prototype === "object" && Object.getPrototypeOf(prototype) === null)
+  );
+}
+
 function validateJson(
   value: unknown,
   credentialKeys: Set<string>,
@@ -90,8 +103,7 @@ function validateJson(
     return;
   }
   if (typeof value !== "object") invalid();
-  const prototype: unknown = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) invalid();
+  if (!isPlainObject(value)) invalid();
   for (const [key, item] of Object.entries(value)) {
     if (
       credentialKeys.has(key) ||
