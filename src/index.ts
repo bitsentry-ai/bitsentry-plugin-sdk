@@ -130,9 +130,22 @@ export type DesktopPluginActionDefinition = z.infer<
   typeof desktopPluginActionDefinitionSchema
 >;
 
-export const desktopPluginAuthSchema = z.object({
-  fields: z.array(desktopPluginFieldDefinitionSchema),
-});
+export const desktopPluginAuthSchema = z
+  .object({
+    fields: z.array(desktopPluginFieldDefinitionSchema),
+    requiredSets: z
+      .array(z.array(z.string().min(1)).min(1))
+      .min(1)
+      .optional(),
+  })
+  .superRefine((auth, context) => {
+    const keys = new Set(auth.fields.map((field) => field.key));
+    if (auth.requiredSets?.some((set) => set.some((key) => !keys.has(key))))
+      context.addIssue({
+        code: "custom",
+        message: "Credential requirements must name declared auth fields",
+      });
+  });
 
 export type DesktopPluginAuth = z.infer<typeof desktopPluginAuthSchema>;
 
@@ -314,6 +327,13 @@ export type DesktopPluginInstallFromArtifactResult = z.infer<
 >;
 
 export const desktopPluginExecutionRequestSchema = z.object({
+  connectionConfig: z
+    .object({
+      version: z.number().int().positive(),
+      value: z.record(z.string(), z.unknown()),
+    })
+    .strict()
+    .optional(),
   pluginId: z.string().min(1),
   actionId: z.string().min(1),
   auth: z.record(z.string(), z.unknown()).optional().default({}),
@@ -366,6 +386,8 @@ export type DesktopPluginOperationContext = {
 };
 
 export type DesktopPluginCodeActionContext = {
+  /** Host-validated non-secret configuration of the selected connection. */
+  config?: Record<string, unknown>;
   pluginId: string;
   actionId: string;
   auth: Record<string, unknown>;

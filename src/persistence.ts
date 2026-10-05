@@ -75,6 +75,19 @@ function matchesField(
   }
 }
 
+/**
+ * A plain object has no prototype or the root prototype of its realm. Comparing with this module's own
+ * `Object.prototype` would refuse a plain object that was created or cloned in another realm (a worker context, a
+ * test sandbox), while a class instance still has a prototype that itself has a prototype.
+ */
+function isPlainObject(value: object): boolean {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return (
+    prototype === null ||
+    (typeof prototype === "object" && Object.getPrototypeOf(prototype) === null)
+  );
+}
+
 function validateJson(
   value: unknown,
   credentialKeys: Set<string>,
@@ -90,8 +103,7 @@ function validateJson(
     return;
   }
   if (typeof value !== "object") invalid();
-  const prototype: unknown = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) invalid();
+  if (!isPlainObject(value)) invalid();
   for (const [key, item] of Object.entries(value)) {
     if (
       credentialKeys.has(key) ||
@@ -102,20 +114,21 @@ function validateJson(
   }
 }
 
-/** Use on persistence writes and again before connection execution. */
-export function validatePluginConnectionConfig(
-  plugin: DesktopCodePlugin | undefined,
+/** Descriptor-only validation for API/UI admission; execution also runs the plugin validator. */
+export function validatePluginConnectionShape(
+  descriptor: DesktopPluginDescriptor,
   version: number,
   input: unknown,
 ): Record<string, unknown> {
-  if (plugin === undefined) throw new PluginPersistenceError("plugin_missing");
-  const contract = requirePluginPersistence(plugin);
+  const contract = requirePluginPersistence(descriptor);
   if (version !== contract.configVersion)
     throw new PluginPersistenceError("upgrade_required");
-  if (plugin.persistence === undefined) invalid();
-  const credentialKeys = new Set(plugin.auth.fields.map((field) => field.key));
-  const validateShape = (value: unknown): Record<string, unknown> => {
-    validateJson(value, credentialKeys);
+  try {
+    const value: unknown = structuredClone(input);
+    validateJson(
+      value,
+      new Set(descriptor.auth.fields.map((field) => field.key)),
+    );
     if (value === null || typeof value !== "object" || Array.isArray(value))
       invalid();
     const record = value as Record<string, unknown>;
@@ -131,11 +144,25 @@ export function validatePluginConnectionConfig(
     const destination = record[contract.destinationField];
     if (typeof destination !== "string" || !destination.trim()) invalid();
     return record;
-  };
+  } catch {
+    return invalid();
+  }
+}
+
+/** Use on persistence writes and again before connection execution. */
+export function validatePluginConnectionConfig(
+  plugin: DesktopCodePlugin | undefined,
+  version: number,
+  input: unknown,
+): Record<string, unknown> {
+  if (plugin === undefined) throw new PluginPersistenceError("plugin_missing");
+  const config = validatePluginConnectionShape(plugin, version, input);
+  if (plugin.persistence === undefined) invalid();
   try {
-    const config = validateShape(structuredClone(input));
-    return validateShape(
-      structuredClone(plugin.persistence.validateConfig(config)),
+    return validatePluginConnectionShape(
+      plugin,
+      version,
+      plugin.persistence.validateConfig(config),
     );
   } catch {
     return invalid();
@@ -223,4 +250,25 @@ export function upgradePluginConnectionConfig(
   } catch {
     return invalid();
   }
+}
+
+/** Alternative credential sets are plugin vocabulary, never provider switches. */
+export function hasPluginCredentials(
+  descriptor: DesktopPluginDescriptor,
+  values: Record<string, unknown>,
+): boolean {
+  const present = (key: string) => {
+    if (!Object.prototype.hasOwnProperty.call(values, key)) return false;
+    const value = values[key];
+    return typeof value === "string"
+      ? value.trim().length > 0
+      : value !== undefined && value !== null;
+  };
+  return (
+    descriptor.auth.fields.every(
+      (field) => !field.required || present(field.key),
+    ) &&
+    (descriptor.auth.requiredSets === undefined ||
+      descriptor.auth.requiredSets.some((set) => set.every(present)))
+  );
 }

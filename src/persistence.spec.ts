@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   assertPluginPersistenceContract,
+  hasPluginCredentials,
   desktopCodePluginSchema,
   desktopPluginDescriptorSchema,
   validatePluginConnectionConfig,
+  validatePluginConnectionShape,
+  desktopPluginExecutionRequestSchema,
   validatePluginResourceState,
   upgradePluginConnectionConfig,
 } from "./index";
@@ -49,6 +52,32 @@ function example() {
 }
 
 describe("plugin-owned persistence contract", () => {
+  it("keeps configuration separate from credentials across the execution transport", () => {
+    const plugin = example();
+    const descriptor = desktopPluginDescriptorSchema.parse(plugin);
+    const config = validatePluginConnectionShape(descriptor, 1, {
+      baseUrl: "https://example.test",
+    });
+    const request = desktopPluginExecutionRequestSchema.parse({
+      pluginId: plugin.id,
+      actionId: "read",
+      auth: { apiKey: "secret-value" },
+      connectionConfig: { version: 1, value: config },
+    });
+    expect(request.connectionConfig?.value).toEqual({
+      baseUrl: "https://example.test",
+    });
+    expect(JSON.stringify(request.connectionConfig)).not.toContain(
+      "secret-value",
+    );
+    expect(() =>
+      validatePluginConnectionShape(descriptor, 1, {
+        baseUrl: "https://example.test",
+        apiKey: "secret-value",
+      }),
+    ).toThrow("invalid_configuration");
+  });
+
   it("round-trips metadata without serializing handlers or adding a provider enum", () => {
     const plugin = example();
     expect(() => {
@@ -194,4 +223,39 @@ describe("persistence boundary snapshots and explicit upgrades", () => {
       ),
     ).toThrow("invalid_configuration");
   });
+});
+
+it("requires one complete plugin-declared credential set", () => {
+  const plugin = desktopPluginDescriptorSchema.parse({
+    ...example(),
+    auth: {
+      fields: [
+        { key: "token", label: "Token", type: "string" },
+        { key: "user", label: "User", type: "string" },
+        { key: "password", label: "Password", type: "string" },
+      ],
+      requiredSets: [["token"], ["user", "password"]],
+    },
+  });
+  expect(hasPluginCredentials(plugin, {})).toBe(false);
+  expect(hasPluginCredentials(plugin, { user: "engineer" })).toBe(false);
+  expect(hasPluginCredentials(plugin, { token: "private" })).toBe(true);
+  expect(
+    hasPluginCredentials(plugin, { user: "engineer", password: "private" }),
+  ).toBe(true);
+});
+
+it("does not count inherited object properties as saved credentials", () => {
+  const plugin = desktopPluginDescriptorSchema.parse({
+    ...example(),
+    auth: {
+      fields: [
+        { key: "constructor", label: "Constructor", type: "string" },
+        { key: "toString", label: "To string", type: "string" },
+      ],
+      requiredSets: [["constructor"], ["toString"]],
+    },
+  });
+  expect(hasPluginCredentials(plugin, {})).toBe(false);
+  expect(hasPluginCredentials(plugin, { constructor: "private" })).toBe(true);
 });
