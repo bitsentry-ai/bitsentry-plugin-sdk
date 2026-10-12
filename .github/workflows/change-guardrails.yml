@@ -38,7 +38,7 @@ jobs:
           }
 
           validate "Pull request title" "$PR_TITLE"
-          git fetch --no-tags origin "$BASE_REF" --depth=1
+          git fetch --no-tags origin "$BASE_REF"
 
           subjects="$(git log --format=%s "origin/$BASE_REF..HEAD")"
           if [[ -z "$subjects" ]]; then
