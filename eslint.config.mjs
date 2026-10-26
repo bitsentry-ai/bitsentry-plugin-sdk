@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import { readabilityConfigs } from "./scripts/eslint/readability-rules.mjs";
 
 export default tseslint.config(
   {
@@ -25,4 +26,5 @@ export default tseslint.config(
       "no-var": "error",
     },
   },
+  ...readabilityConfigs({ files: ["src/**/*.ts"] }),
 );
